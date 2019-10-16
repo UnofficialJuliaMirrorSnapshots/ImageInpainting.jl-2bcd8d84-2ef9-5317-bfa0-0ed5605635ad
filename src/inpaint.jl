@@ -1,6 +1,5 @@
 # ------------------------------------------------------------------
-# Copyright (c) 2018, Júlio Hoffimann Mendes <juliohm@stanford.edu>
-# Licensed under the ISC License. See LICENCE in the project root.
+# Licensed under the ISC License. See LICENSE in the project root.
 # ------------------------------------------------------------------
 
 """
@@ -16,7 +15,8 @@ abstract type InpaintAlgo end
 Inpaint `img` on pixels marked as `true` in `mask` using
 algorithm `algo`.
 """
-function inpaint(img::AbstractArray, mask::BitArray, algo::InpaintAlgo)
+function inpaint(img::AbstractArray{T,N}, mask::AbstractArray{Bool,N},
+                 algo::InpaintAlgo) where {N,T}
   # sanity checks
   @assert size(img) == size(mask) "image and mask must have same size"
 
@@ -27,4 +27,4 @@ end
 #------------------
 # IMPLEMENTATIONS
 #------------------
-include("crimisini.jl")
+include("criminisi.jl")

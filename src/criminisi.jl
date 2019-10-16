@@ -1,49 +1,56 @@
 # ------------------------------------------------------------------
-# Copyright (c) 2018, Júlio Hoffimann Mendes <juliohm@stanford.edu>
-# Licensed under the ISC License. See LICENCE in the project root.
+# Licensed under the ISC License. See LICENSE in the project root.
 # ------------------------------------------------------------------
 
 """
-    Crimisini(patchsize)
+    Criminisi(px, py)
 
 Examplar-based inpainting based on confidence
-and isophote maps. `patchsize` is the patch size
+and isophote maps. `(px, py)` is the patch size
 as a tuple of integers.
+
+## Notes
+
+The Criminisi algorithm is defined for 2D images.
 
 ## References
 
-Crimisini, A., Pérez, P., Toyama, K., 2004. Region Filling
+Criminisi, A., Pérez, P., Toyama, K., 2004. Region Filling
 and Object Removal by Examplar-based Image Inpainting.
 """
-struct Crimisini{N} <: InpaintAlgo
-  patchsize::Dims{N}
+struct Criminisi <: InpaintAlgo
+  px::Int
+  py::Int
 end
 
-Crimisini(patchsize::Vararg{Int,N}) where {N} = Crimisini{N}(patchsize)
-
 # implementation follows the notation in the paper
-function inpaint_impl(img::AbstractArray{T,N}, mask::BitArray{N}, algo::Crimisini{N}) where {T,N}
+function inpaint_impl(img::AbstractArray{T,2}, mask::AbstractArray{Bool,2},
+                      algo::Criminisi) where {T}
   # use all CPU cores in FFT
   set_num_threads(cpucores())
 
   # patch (or tile) size
-  patchsize = algo.patchsize
+  patchsize = algo.px, algo.py
 
-  # already filled region
-  ϕ = .!mask
+  # rotation matrix: gradient -> isophote
+  # (this is what makes the implementation 2D)
+  R = [ cos(π/2) sin(π/2)
+       -sin(π/2) cos(π/2)]
 
-  # initialize confidence map
-  C = Float64.(ϕ)
-
-  # pad arrays
+  # pad input arrays
   prepad  = @. (patchsize - 1) ÷ 2
   postpad = @. (patchsize    ) ÷ 2
-  I = parent(padarray(img, Pad(:symmetric, prepad, postpad)))
-  ϕ = parent(padarray(ϕ, Fill(true, prepad, postpad)))
-  C = parent(padarray(C, Fill(0.0,  prepad, postpad)))
+  I = padarray(img, Pad(:symmetric, prepad, postpad))
+  M = padarray(mask, Fill(false, prepad, postpad))
 
   # fix any invalid pixel value in masked region
   replace!(I, NaN => 0)
+
+  # initialize filled region
+  ϕ = .!M
+
+  # initialize confidence map
+  C = Float64.(ϕ)
 
   # inpainting frontier
   δΩ = findall(dilate(ϕ) .& .!ϕ)
@@ -57,9 +64,9 @@ function inpaint_impl(img::AbstractArray{T,N}, mask::BitArray{N}, algo::Crimisin
     end
 
     # isophote map
-    ∇I = pointgradients(I, δΩ)
-    nᵩ = pointgradients(ϕ, δΩ)
-    D  = vec(abs.(sum(∇I .* nᵩ, dims=2)))
+    ∇I = pointgradients(I, δΩ) * R
+    nϕ = pointgradients(ϕ, δΩ)
+    D  = vec(abs.(sum(∇I .* nϕ, dims=2)))
     D /= maximum(D)
 
     # select patch in frontier
@@ -68,16 +75,13 @@ function inpaint_impl(img::AbstractArray{T,N}, mask::BitArray{N}, algo::Crimisin
     bₚ = selectpatch(ϕ, patchsize, p)
 
     # compute distance to all other patches
-    Δ = convdist(I, ψₚ, weights=bₚ)
+    Δ = convdist(I, ψₚ, bₚ)
 
     # only consider patches in filled region
     Δ[mask] .= Inf
 
-    # find index in padded arrays
-    sub = argmin(Δ)
-    q = CartesianIndex(@. sub.I + (patchsize-1)÷2)
-
     # select best candidate
+    q = argmin(Δ)
     ψᵦ = selectpatch(I, patchsize, q)
     bᵦ = selectpatch(ϕ, patchsize, q)
 
@@ -90,8 +94,6 @@ function inpaint_impl(img::AbstractArray{T,N}, mask::BitArray{N}, algo::Crimisin
     δΩ = findall(dilate(ϕ) .& .!ϕ)
   end
 
-  # return unpadded image
-  start  = CartesianIndex(1 .+ prepad)
-  finish = CartesianIndex(size(I) .- postpad)
-  view(I, start:finish)
+  # TODO: return unpadded image
+  I
 end
