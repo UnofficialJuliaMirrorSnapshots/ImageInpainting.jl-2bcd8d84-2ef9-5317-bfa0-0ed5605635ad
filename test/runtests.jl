@@ -4,9 +4,6 @@ using TestImages
 using Plots, VisualRegressionTests
 using Test, Pkg
 
-# default plot settings
-gr(size=(800,400),yflip=true,colorbar=false,ticks=false)
-
 # workaround GR warnings
 ENV["GKSwstype"] = "100"
 
@@ -20,21 +17,13 @@ if !istravis
   using Gtk
 end
 
-# test images
-blobs = testimage("blobs")
-lighthouse = testimage("lighthouse")
-
 # helper functions
-function plot_criminisi_on_array(fname, img, inds, psize)
-  fimg = Float64.(Gray.(img))
-  mask = falses(size(fimg))
-  mask[inds...] .= true
-  fimg[mask] .= NaN
-  fimg2 = inpaint(fimg, mask, Criminisi(psize[1], psize[2]))
-  plt1 = heatmap(fimg, title="before inpainting")
-  plt2 = heatmap(fimg2, title="after inpainting")
-  plot(plt1, plt2)
-  png(fname)
+function plot_before_after(before, mask, after)
+  gr(size=(800,400),yflip=true,colorbar=false,ticks=false)
+  B = copy(before); B[mask] .= NaN
+  p1 = heatmap(B,title="before")
+  p2 = heatmap(after,title="after")
+  plot(p1, p2, aspect_ratio=:equal)
 end
 
 # list of tests
